@@ -5,10 +5,14 @@ import keyboard
 import os
 
 # 配置参数
-TARGET_IMAGE = 'target.png'  # 目标图片文件名
+# 目标列表：(文件名, 点击位置横向偏移量 0.5=中心 0.95=最右侧, 描述)
+TARGETS = [
+    ('target.png', 0.95, '默认继续'),
+    ('delete.png', 0.5, '删除确认')
+]
+
 CHECK_INTERVAL = 2  # 检查间隔（秒）
 CONFIDENCE = 0.8  # 匹配相似度（需要安装opencv-python）
-CLICK_OFFSET_X = 0.95  # 点击位置的横向偏移量（0.5为中心，0.95为最右侧）
 
 # Windows API 常量
 ES_CONTINUOUS = 0x80000000
@@ -29,11 +33,18 @@ def restore_sleep():
 
 def main():
     print("脚本已启动！")
-    print(f"请确保目录中存在 '{TARGET_IMAGE}' 图片文件。")
     print("按 'q' 键退出脚本。")
 
-    if not os.path.exists(TARGET_IMAGE):
-        print(f"错误：未找到 '{TARGET_IMAGE}'。请截图目标按钮并保存为该文件名。")
+    valid_targets = []
+    for filename, offset, desc in TARGETS:
+        if os.path.exists(filename):
+            print(f"已加载目标: {filename} ({desc})")
+            valid_targets.append((filename, offset, desc))
+        else:
+            print(f"提示: 未找到 '{filename}' ({desc})，如需启用请截图保存为该文件名。")
+
+    if not valid_targets:
+        print("错误：未找到任何目标图片文件。请至少准备一个目标图片。")
         return
 
     prevent_sleep()
@@ -51,28 +62,31 @@ def main():
                 print(f"[{time.strftime('%H:%M:%S')}] 正在监控中...", end='\r')
             count += 1
 
-            try:
-                # 查找屏幕上的目标图片
-                box = pyautogui.locateOnScreen(TARGET_IMAGE, confidence=CONFIDENCE)
-                
-                if box:
-                    # 计算点击位置
-                    click_x = box.left + box.width * CLICK_OFFSET_X
-                    click_y = box.top + box.height * 0.5
+            found_any = False
+            for filename, offset, desc in valid_targets:
+                try:
+                    # 查找屏幕上的目标图片
+                    box = pyautogui.locateOnScreen(filename, confidence=CONFIDENCE)
                     
-                    print(f"发现目标！区域: {box}, 点击位置: ({click_x}, {click_y})")
-                    pyautogui.click(click_x, click_y)
-                    print("已点击继续。等待5秒避免重复点击...")
-                    time.sleep(5)  # 点击后等待一段时间
-                else:
-                    # print("未找到目标，继续监控...", end='\r')
+                    if box:
+                        # 计算点击位置
+                        click_x = box.left + box.width * offset
+                        click_y = box.top + box.height * 0.5
+                        
+                        print(f"\n发现目标[{desc}]！区域: {box}, 点击位置: ({click_x}, {click_y})")
+                        pyautogui.click(click_x, click_y)
+                        print("已点击。等待5秒避免重复点击...")
+                        time.sleep(5)  # 点击后等待一段时间
+                        found_any = True
+                        break # 找到一个后跳出循环，重新开始监控
+                except pyautogui.ImageNotFoundException:
                     pass
-                    
-            except pyautogui.ImageNotFoundException:
-                # print("未找到目标（异常），继续监控...", end='\r')
+                except Exception as e:
+                    print(f"\n发生错误 ({desc}): {e}")
+
+            if not found_any:
+                # print("未找到目标，继续监控...", end='\r')
                 pass
-            except Exception as e:
-                print(f"发生错误: {e}")
 
             time.sleep(CHECK_INTERVAL)
             
